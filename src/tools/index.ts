@@ -32,10 +32,11 @@ export function registerTools(server: McpServer): void {
       if (toolConfig.name === BUILTIN_TOOL_EXECUTE_SQL) {
         registerExecuteSqlTool(server, sourceId);
       } else if (toolConfig.name === BUILTIN_TOOL_SEARCH_OBJECTS) {
-        registerSearchObjectsTool(server, sourceId);
+        // The toolConfig itself is the SearchObjectsToolConfig
+        registerSearchObjectsTool(server, sourceId, toolConfig as import("../types/config.js").SearchObjectsToolConfig);
       } else {
         // Custom tool
-        registerCustomTool(server, sourceId, toolConfig);
+        registerCustomTool(server, sourceId, toolConfig as import("../types/config.js").CustomToolConfig);
       }
     }
   }
@@ -65,7 +66,8 @@ function registerExecuteSqlTool(
  */
 function registerSearchObjectsTool(
   server: McpServer,
-  sourceId: string
+  sourceId: string,
+  config?: import("../types/config.js").SearchObjectsToolConfig
 ): void {
   const metadata = getSearchObjectsMetadata(sourceId);
 
@@ -82,7 +84,7 @@ function registerSearchObjectsTool(
         openWorldHint: false,
       },
     },
-    createSearchDatabaseObjectsToolHandler(sourceId)
+    createSearchDatabaseObjectsToolHandler(sourceId, config)
   );
 }
 
@@ -92,7 +94,7 @@ function registerSearchObjectsTool(
 function registerCustomTool(
   server: McpServer,
   sourceId: string,
-  toolConfig: ToolConfig
+  toolConfig: import("../types/config.js").CustomToolConfig
 ): void {
   const sourceConfig = ConnectorManager.getSourceConfig(sourceId)!;
   const dbType = sourceConfig.type;

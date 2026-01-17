@@ -75,6 +75,8 @@ export interface ExecuteSqlToolConfig {
 export interface SearchObjectsToolConfig {
   name: "search_objects"; // Must match BUILTIN_TOOL_SEARCH_OBJECTS from builtin-tools.ts
   source: string;
+  exclude_schemas?: string[]; // Glob patterns for schemas to exclude (e.g. "_timescaledb_%")
+  exclude_tables?: string[]; // Glob patterns for tables to exclude
 }
 
 /**
