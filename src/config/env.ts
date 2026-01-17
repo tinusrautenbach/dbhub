@@ -418,7 +418,7 @@ export function resolveSSHConfig(): { config: SSHTunnelConfig; source: string } 
       // Use SSH config as base, but allow command line/env to override
       config = { ...sshConfigData };
       sources.push(`SSH config for host '${sshConfigHost}'`);
-      
+
       // The host from SSH config has already been set, no need to override
     }
   }
@@ -603,9 +603,27 @@ export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[];
       source.init_script = getSqliteInMemorySetupSql();
     }
 
+    // Ensure we import the type for SearchObjectsToolConfig
+    const tools: import("../types/config.js").ToolConfig[] = [];
+
+    // Parse exclusion flags for search_objects
+    // These apply to the search_objects tool for this source
+    const args = parseCommandLineArgs();
+    const excludeSchemas = args["exclude-schemas"] ? args["exclude-schemas"].split(",").map(s => s.trim()) : undefined;
+    const excludeTables = args["exclude-tables"] ? args["exclude-tables"].split(",").map(t => t.trim()) : undefined;
+
+    if (excludeSchemas || excludeTables) {
+      tools.push({
+        name: "search_objects",
+        source: sourceId,
+        exclude_schemas: excludeSchemas,
+        exclude_tables: excludeTables,
+      });
+    }
+
     return {
       sources: [source],
-      tools: [],
+      tools: tools,
       source: dsnResult.isDemo ? "demo mode" : dsnResult.source,
     };
   }
