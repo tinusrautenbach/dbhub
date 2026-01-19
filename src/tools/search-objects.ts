@@ -460,6 +460,89 @@ async function searchColumns(
   filterSchemas: (schemas: string[]) => string[],
   filterTables: (tables: string[]) => string[]
 ): Promise<any[]> {
+  // Optimized query for Postgres
+  if (connector.id === "postgres") {
+    try {
+      // If schema is provided, use it. If not, use all schemas (filtered)
+      let schemasToSearch: string[];
+      if (schemaFilter) {
+        schemasToSearch = [schemaFilter];
+      } else {
+        const allSchemas = await connector.getSchemas();
+        schemasToSearch = filterSchemas(allSchemas);
+      }
+
+      if (schemasToSearch.length > 0) {
+        // Construct query
+        let sql = `
+          SELECT 
+            table_schema, 
+            table_name, 
+            column_name, 
+            data_type, 
+            is_nullable, 
+            column_default
+          FROM information_schema.columns
+          WHERE table_schema = ANY($1)
+         `;
+
+        const queryParams: any[] = [schemasToSearch];
+
+        if (tableFilter) {
+          sql += ` AND table_name = $2`;
+          queryParams.push(tableFilter);
+        } else {
+          // If we are filtering tables using the exclusion list, we can't easily do it in SQL unless we query all and filter in JS.
+          // But we can apply the pattern for column name
+        }
+
+        // Add column name pattern
+        const paramOffset = queryParams.length;
+        sql += ` AND column_name LIKE $${paramOffset + 1}`;
+        queryParams.push(pattern);
+
+        // Order and Limit
+        sql += ` ORDER BY table_schema, table_name, ordinal_position LIMIT $${queryParams.length + 1}`;
+        queryParams.push(limit * 2);
+
+        const result = await connector.executeSQL(sql, {}, queryParams);
+
+        let rows = result.rows;
+
+        // Apply table filtering if needed
+        if (!tableFilter) {
+          const distinctTables = [...new Set(rows.map(r => r.table_name))];
+          const allowedTables = new Set(filterTables(distinctTables));
+          rows = rows.filter(r => allowedTables.has(r.table_name));
+        }
+
+        if (rows.length > limit) {
+          rows = rows.slice(0, limit);
+        }
+
+        if (detailLevel === "names") {
+          return rows.map(r => ({
+            name: r.column_name,
+            table: r.table_name,
+            schema: r.table_schema
+          }));
+        } else {
+          return rows.map(r => ({
+            name: r.column_name,
+            table: r.table_name,
+            schema: r.table_schema,
+            type: r.data_type,
+            nullable: r.is_nullable === "YES",
+            default: r.column_default
+          }));
+        }
+      }
+
+    } catch (e) {
+      console.warn("Optimized searchColumns failed, falling back:", e);
+    }
+  }
+
   const regex = likePatternToRegex(pattern);
   const results: any[] = [];
 
@@ -716,11 +799,8 @@ export function createSearchDatabaseObjectsToolHandler(sourceId?: string, config
 
       // Validate table parameter
       if (table) {
-        if (!schema) {
-          success = false;
-          errorMessage = "The 'table' parameter requires 'schema' to be specified";
-          return createToolErrorResponse(errorMessage, "SCHEMA_REQUIRED");
-        }
+        // Schema is no longer strictly required for table parameter
+        // But if schema is not provided, we will search across all schemas (which might receive multiple same-named tables)
         if (!["column", "index"].includes(object_type)) {
           success = false;
           errorMessage = `The 'table' parameter only applies to object_type 'column' or 'index', not '${object_type}'`;

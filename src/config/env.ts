@@ -613,6 +613,13 @@ export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[];
     const excludeTables = args["exclude-tables"] ? args["exclude-tables"].split(",").map(t => t.trim()) : undefined;
 
     if (excludeSchemas || excludeTables) {
+      // If we are customizing tools, we must explicitly add execute_sql as well
+      // because the registry won't add defaults if any tools are defined for this source
+      tools.push({
+        name: "execute_sql",
+        source: sourceId,
+      });
+
       tools.push({
         name: "search_objects",
         source: sourceId,
